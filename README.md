@@ -2,11 +2,9 @@ Alertes leboncoin
 ====================
 
 Script d'alertes email leboncoin.fr via Google Docs
-Fork du projet de St3ph-fr
+Fork du projet de St3ph-fr (https://plus.google.com/u/0/b/116856005769817085204/116856005769817085204/posts)
 
 Pour créer rapidement votre feuille de recherche: https://goo.gl/1daGn2
-
-Pour suivre les évolutions abonnez vous à la page google plus d'alerte lbc : https://plus.google.com/u/0/b/116856005769817085204/116856005769817085204/posts
 
 Historique des modifications :
  * 20 Mai 2016 - Modifs proposées par Franck : ajout de l'heure dans le log + ajout de l'image "https://www.leboncoin.fr/img/no-picture-adview.png" lorsque l'annonce n'a pas de photo + ajout de la fonction purgeLog, qui permet de supprimer des lignes dans le log au dela du seuil défini par l'utilisateur
