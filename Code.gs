@@ -1,11 +1,12 @@
    /*
  * ChangeLog
- * 6 Mars 2016 - Adaptation au nouveau site du Bon Coin, ainsi que quelques nettoyages
- * 7 Mars 2016 - Format d'email plus compact
+ * 06 Mars 2016 - Adaptation au nouveau site du Bon Coin, ainsi que quelques nettoyages
+ * 07 Mars 2016 - Format d'email plus compact
  * 21 Mars 2016 - Correction message d'erreur si email destinataire non défini
  * 30 Mars 2016 - Identifie si la photo est manquante dans l'annonce, itération plus propre dans les annonces
  * 31 Mars 2016 - Correction regression dans le case de "Setup Recherche"
  * 20 Mai 2016 - Modifs proposées par Franck : ajout de l'heure dans le log (à partir de ligne 112) + ajout de l'image "https://www.leboncoin.fr/img/no-picture-adview.png" lorsque l'annonce n'a pas de photo (ligne 257) + ajout de la fonction purgeLog, qui permet de supprimer des lignes dans le log au dela du seuil défini par l'utilisateur
+ * 08 Novembre 2016 - Adaptation aux changements du site LeBonCoin.fr implémentés le 7 novembre
  */
 
 var debug = false;
@@ -48,7 +49,7 @@ function lbc(sendMail){
       
       if(rep.indexOf("Aucune annonce") < 0) {
         
-        var data = splitResult_(rep);
+        var data = extractListing_(rep);
         data = data.substring(data.indexOf("<a"));
         
         var announceURL = extractA_(data);
@@ -67,10 +68,10 @@ function lbc(sendMail){
               
               Logger.log("data = " + data);
 
-              var endAnnounceMarker = "</section>";
-              var endAnnounceMarkerPos = data.indexOf(endAnnounceMarker);
+              var endListingMarker = "</section>";
+              var endListingMarkerPos = data.indexOf(endListingMarker);
                 
-              if (endAnnounceMarkerPos > 0) {
+              if (endListingMarkerPos > 0) {
 
                 nbRes++;
                 
@@ -79,7 +80,7 @@ function lbc(sendMail){
                 var price = extractPrice_(data);
                 var vendpro = extractPro_(data);
                 var date = extractDate_(data);
-                var image = extractImage_(data, endAnnounceMarkerPos);
+                var image = extractImage_(data, endListingMarkerPos);
 
                 announceHTML += "<tr style=\"height:1px; padding-bottom:10px;\"><td style=\"border-top:1px solid #ccc;\" colspan=\"2\"></td></tr>"
                 announceHTML += "<tr><td style=\"width:200px;padding-right:20px;\"><a href=\"" + announceURL + "\" target=\"" + announceId + "\"><img src=\""+ image +"\"></a></td>";
@@ -88,7 +89,7 @@ function lbc(sendMail){
                 announceHTML += "</td></tr>";
                                
                 //Skip the block already analyzed
-                data = data.substring(endAnnounceMarkerPos+endAnnounceMarker.length);
+                data = data.substring(endListingMarkerPos+endListingMarker.length);
                 
                 announceURL = extractA_(data);
                 announceId  = extractId_(announceURL);
@@ -189,7 +190,9 @@ function extractA_(data){
 * Extrait le titre de l'annonce
 */
 function extractTitle_(data){
-  return data.substring(data.indexOf("title=") + 7 , data.indexOf("\"", data.indexOf("title=") + 7) );
+  
+  var startTitle = data.indexOf("title=") + 7;
+  return data.substring(startTitle , data.indexOf("\"", startTitle) );
 }
 
 /**
@@ -214,11 +217,16 @@ function extractPro_(data){
 function extractPlace_(data){
   
   // Look for the 2nd "item_supp" block  
-  var infoMarker = "<p class=\"item_supp\">";
+  var infoMarker = "<p class=\"item_supp\"";
   var info1pos = data.indexOf(infoMarker);
-  var info2pos = data.indexOf(infoMarker, info1pos + infoMarker.length);
+  info1pos = data.indexOf(infoMarker, info1pos + infoMarker.length);
+  if (info1pos > 0) {
     
-  return data.substring(info2pos + infoMarker.length, data.indexOf("</p>", info2pos) );
+    var info2pos = data.indexOf(">", info1pos);
+    return data.substring(info2pos+1, data.indexOf("</p>", info2pos+1) );
+  }
+  else
+    return "";
 }
 
 /**
@@ -226,12 +234,15 @@ function extractPlace_(data){
 */
 function extractPrice_(data){
 
-  var priceMarker = "<h3 class=\"item_price\">";
+  var priceMarker = "<h3 class=\"item_price\"";
   var priceStart  = data.indexOf(priceMarker);
-  if (priceStart < 0)
-    return "";
+  if (priceStart > 0) {
+    
+    var price2Start = data.indexOf(">", priceStart + priceMarker.length);
+    return data.substring(price2Start+1, data.indexOf("</h3>", price2Start+1) );    
+  }
   else
-    return data.substring(priceStart + priceMarker.length, data.indexOf("</h3>", priceStart + priceMarker.length) );
+    return "";
 }
 
 /**
@@ -239,23 +250,26 @@ function extractPrice_(data){
 */
 function extractDate_(data){
 
-  // Look for the 3rd "item_supp" block  
-  var infoMarker = "<p class=\"item_supp\">";
+  var infoMarker = "itemprop=\"availabilityStarts\"";
   var info1pos = data.indexOf(infoMarker);
-  var info2pos = data.indexOf(infoMarker, info1pos + infoMarker.length);
-  var info3pos = data.indexOf(infoMarker, info2pos + infoMarker.length);
-    
-  return data.substring(info3pos + infoMarker.length, data.indexOf("</p>", info3pos) );
+  
+  if (info1pos > 0) {
+    info1pos = data.indexOf(">", info1pos+infoMarker.length);
+    var info2pos = data.indexOf("</p>", info1pos+1);
+    return data.substring(info1pos+1, info2pos);
+  }
+  else
+    return "";
 }
 
 /**
 * Extrait l'image de l'annonce
 */
-function extractImage_(data, endAnnounceMarkerPos){
+function extractImage_(data, endListingMarkerPos){
   
   var imgStartMarker = "data-imgSrc=";
   var imageStart = data.indexOf(imgStartMarker);
-  if ((imageStart < 0) || (imageStart > endAnnounceMarkerPos)) {
+  if ((imageStart < 0) || (imageStart > endListingMarkerPos)) {
     return "https://www.leboncoin.fr/img/no-picture-adview.png";
   }
   else {
@@ -270,12 +284,17 @@ function extractImage_(data, endAnnounceMarkerPos){
 /**
 * Extrait la liste des annonces
 */
-function splitResult_(text){
+function extractListing_(text){
   
-  var debut = text.indexOf("<section id=\"listingAds\"");
-  debut = text.indexOf("<li>", debut);
-  var fin = text.indexOf("<div id=\"google_ads\"");
-  return text.substring(debut,fin);
+  /* var debut = text.indexOf("<section id=\"listingAds\""); */
+  var debut = text.indexOf("<!-- Listing list -->");
+  debut = text.indexOf("<li ", debut);
+  var fin = text.indexOf("<!-- Google Adsense -->", debut);
+
+  if (fin > debut)
+    return text.substring(debut,fin);
+  else
+    return "";
 }
 
 //Activer/Désactiver les logs
