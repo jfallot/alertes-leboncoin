@@ -7,6 +7,7 @@
  * 31 Mars 2016 - Correction regression dans le case de "Setup Recherche"
  * 20 Mai 2016 - Modifs proposées par Franck : ajout de l'heure dans le log (à partir de ligne 112) + ajout de l'image "https://www.leboncoin.fr/img/no-picture-adview.png" lorsque l'annonce n'a pas de photo (ligne 257) + ajout de la fonction purgeLog, qui permet de supprimer des lignes dans le log au dela du seuil défini par l'utilisateur
  * 08 Novembre 2016 - Adaptation aux changements du site LeBonCoin.fr implémentés le 7 novembre
+ * 01 Aout 2017 - Gère le cas où aucun prix n'est précisé dans l'annonce
  */
 
 var debug = false;
@@ -77,7 +78,7 @@ function lbc(sendMail){
                 
                 var title = extractTitle_(data);
                 var place = extractPlace_(data);
-                var price = extractPrice_(data);
+                var price = extractPrice_(data, endListingMarkerPos);
                 var vendpro = extractPro_(data);
                 var date = extractDate_(data);
                 var image = extractImage_(data, endListingMarkerPos);
@@ -232,17 +233,19 @@ function extractPlace_(data){
 /**
 * Extrait le prix de l'annonce
 */
-function extractPrice_(data){
+function extractPrice_(data, endListingMarkerPos){
 
   var priceMarker = "<h3 class=\"item_price\"";
   var priceStart  = data.indexOf(priceMarker);
-  if (priceStart > 0) {
+  
+  if ((priceStart < 0) || (priceStart > endListingMarkerPos)) {
+    return "";
+  }
+  else {
     
     var price2Start = data.indexOf(">", priceStart + priceMarker.length);
     return data.substring(price2Start+1, data.indexOf("</h3>", price2Start+1) );    
   }
-  else
-    return "";
 }
 
 /**
