@@ -5,9 +5,10 @@
  * 21 Mars 2016 - Correction message d'erreur si email destinataire non défini
  * 30 Mars 2016 - Identifie si la photo est manquante dans l'annonce, itération plus propre dans les annonces
  * 31 Mars 2016 - Correction regression dans le case de "Setup Recherche"
- * 20 Mai 2016 - Modifs proposées par Franck : ajout de l'heure dans le log (à partir de ligne 112) + ajout de l'image "https://www.leboncoin.fr/img/no-picture-adview.png" lorsque l'annonce n'a pas de photo (ligne 257) + ajout de la fonction purgeLog, qui permet de supprimer des lignes dans le log au dela du seuil défini par l'utilisateur
- * 08 Novembre 2016 - Adaptation aux changements du site LeBonCoin.fr implémentés le 7 novembre
+ * 20 Mai  2016 - Modifs proposées par Franck : ajout de l'heure dans le log (à partir de ligne 112) + ajout de l'image "https://www.leboncoin.fr/img/no-picture-adview.png" lorsque l'annonce n'a pas de photo (ligne 257) + ajout de la fonction purgeLog, qui permet de supprimer des lignes dans le log au dela du seuil défini par l'utilisateur
+ * 08 Nov  2016 - Adaptation aux changements du site LeBonCoin.fr implémentés le 7 novembre
  * 01 Aout 2017 - Gère le cas où aucun prix n'est précisé dans l'annonce
+ * 14 Sept 2017 - Coorection: images n'apparaissant plus dans les emails
  */
 
 var debug = false;
@@ -279,7 +280,10 @@ function extractImage_(data, endListingMarkerPos){
     
     var imageEnd = data.indexOf("data-imgAlt=", imageStart);
     var image = data.substring(imageStart + imgStartMarker.length + 1, imageEnd - 2);
-    image = image.replace("//","http://");
+    
+    if (image.indexOf("http") < 0) {
+      image = image.replace("//","http://");
+    }
     return image;
   }
 }
