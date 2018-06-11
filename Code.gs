@@ -1,14 +1,14 @@
-   /*
+/*
  * ChangeLog
- * 06 Mars 2016 - Adaptation au nouveau site du Bon Coin, ainsi que quelques nettoyages
- * 07 Mars 2016 - Format d'email plus compact
- * 21 Mars 2016 - Correction message d'erreur si email destinataire non défini
- * 30 Mars 2016 - Identifie si la photo est manquante dans l'annonce, itération plus propre dans les annonces
- * 31 Mars 2016 - Correction regression dans le case de "Setup Recherche"
- * 20 Mai  2016 - Modifs proposées par Franck : ajout de l'heure dans le log (à partir de ligne 112) + ajout de l'image "https://www.leboncoin.fr/img/no-picture-adview.png" lorsque l'annonce n'a pas de photo (ligne 257) + ajout de la fonction purgeLog, qui permet de supprimer des lignes dans le log au dela du seuil défini par l'utilisateur
- * 08 Nov  2016 - Adaptation aux changements du site LeBonCoin.fr implémentés le 7 novembre
+ * 11 Juin 2018 - Adaptation aux changements importants implémentés fin mai/début juin. Les images ne peuvent cependant plus être récupérées.
+ * 14 Sept 2017 - Correction: images n'apparaissant plus dans les emails* 06 Mars 2016 - Adaptation au nouveau site du Bon Coin, ainsi que quelques nettoyages
  * 01 Aout 2017 - Gère le cas où aucun prix n'est précisé dans l'annonce
- * 14 Sept 2017 - Coorection: images n'apparaissant plus dans les emails
+ * 08 Nov  2016 - Adaptation aux changements du site LeBonCoin.fr implémentés le 7 novembre
+ * 20 Mai  2016 - Modifs proposées par Franck : ajout de l'heure dans le log (à partir de ligne 112) + ajout de l'image "https://www.leboncoin.fr/img/no-picture-adview.png" lorsque l'annonce n'a pas de photo (ligne 257) + ajout de la fonction purgeLog, qui permet de supprimer des lignes dans le log au dela du seuil défini par l'utilisateur
+ * 31 Mars 2016 - Correction regression dans le case de "Setup Recherche"
+ * 30 Mars 2016 - Identifie si la photo est manquante dans l'annonce, itération plus propre dans les annonces
+ * 21 Mars 2016 - Correction message d'erreur si email destinataire non défini
+ * 07 Mars 2016 - Format d'email plus compact
  */
 
 var debug = false;
@@ -47,12 +47,13 @@ function lbc(sendMail){
       body = "";
       announceHTML = "";
 
-      var rep = UrlFetchApp.fetch(searchURL).getContentText("iso-8859-15");
+      //var rep = UrlFetchApp.fetch(searchURL).getContentText("iso-8859-15");
+      var rep = UrlFetchApp.fetch(searchURL).getContentText("utf-8");
       
       if(rep.indexOf("Aucune annonce") < 0) {
         
         var data = extractListing_(rep);
-        data = data.substring(data.indexOf("<a"));
+        data = data.substring(data.indexOf("<ul "));
         
         var announceURL = extractA_(data);
         var firstID     = extractId_(announceURL);
@@ -70,7 +71,7 @@ function lbc(sendMail){
               
               Logger.log("data = " + data);
 
-              var endListingMarker = "</section>";
+              var endListingMarker = "</li>";
               var endListingMarkerPos = data.indexOf(endListingMarker);
                 
               if (endListingMarkerPos > 0) {
@@ -82,6 +83,8 @@ function lbc(sendMail){
                 var price = extractPrice_(data, endListingMarkerPos);
                 var vendpro = extractPro_(data);
                 var date = extractDate_(data);
+                
+                Logger.log(data);
                 var image = extractImage_(data, endListingMarkerPos);
 
                 announceHTML += "<tr style=\"height:1px; padding-bottom:10px;\"><td style=\"border-top:1px solid #ccc;\" colspan=\"2\"></td></tr>"
@@ -175,17 +178,20 @@ function extractId_(data){
 */
 function extractA_(data){
   
-  var aPos = data.indexOf("<a");
+  var aPos = data.indexOf("href=");
   if (aPos < 0)
     return "";
   
-  var found = data.substring(aPos + 9 , data.indexOf(".htm", aPos + 9) + 4);
+  var found = data.substring(aPos + 6 , data.indexOf(".htm", aPos + 6) + 4);
   
   // Handle case when the URL doesn't start by http:
   if (found.indexOf("//") == 0)
-    return "http:" + found;
+    return "https:" + found;
   else
-    return found;
+    if (found.indexOf("/") == 0)
+      return "https://www.leboncoin.fr" + found;
+  else
+      return found;
 }
 
 /**
@@ -193,8 +199,17 @@ function extractA_(data){
 */
 function extractTitle_(data){
   
-  var startTitle = data.indexOf("title=") + 7;
-  return data.substring(startTitle , data.indexOf("\"", startTitle) );
+  /*var startTitle = data.indexOf("title=") + 7;
+  return data.substring(startTitle , data.indexOf("\"", startTitle) );*/
+  
+  var startTitle = data.indexOf("<span itemprop=\"name\"");
+  if (startTitle > 0) {
+    startTitle = data.indexOf(">", startTitle);
+    return data.substring(startTitle+1, data.indexOf("</span>", startTitle) );
+  }
+  else {
+    return "No title found";
+  }
 }
 
 /**
@@ -218,14 +233,11 @@ function extractPro_(data){
 */
 function extractPlace_(data){
   
-  // Look for the 2nd "item_supp" block  
-  var infoMarker = "<p class=\"item_supp\"";
-  var info1pos = data.indexOf(infoMarker);
-  info1pos = data.indexOf(infoMarker, info1pos + infoMarker.length);
-  if (info1pos > 0) {
+  var infopos = data.indexOf("itemprop=\"availableAtOrFrom\"");
+  infopos = data.indexOf(">", infopos);
+  if (infopos > 0) {
     
-    var info2pos = data.indexOf(">", info1pos);
-    return data.substring(info2pos+1, data.indexOf("</p>", info2pos+1) );
+    return data.substring(infopos+1, data.indexOf("</p>", infopos+1) );
   }
   else
     return "";
@@ -236,7 +248,7 @@ function extractPlace_(data){
 */
 function extractPrice_(data, endListingMarkerPos){
 
-  var priceMarker = "<h3 class=\"item_price\"";
+  var priceMarker = "<span itemprop=\"price\"";
   var priceStart  = data.indexOf(priceMarker);
   
   if ((priceStart < 0) || (priceStart > endListingMarkerPos)) {
@@ -244,8 +256,12 @@ function extractPrice_(data, endListingMarkerPos){
   }
   else {
     
-    var price2Start = data.indexOf(">", priceStart + priceMarker.length);
-    return data.substring(price2Start+1, data.indexOf("</h3>", price2Start+1) );    
+    var endSpanMarker = "</span>";
+    var price2Start   = data.indexOf(">", priceStart + priceMarker.length);
+    var priceEnd      = data.indexOf(endSpanMarker, price2Start+1);
+    var priceNumber   = data.substring(price2Start+1, priceEnd);
+    var priceCurrency = data.substring(priceEnd + endSpanMarker.length, data.indexOf(endSpanMarker, priceEnd + endSpanMarker.length));
+    return priceNumber + priceCurrency;
   }
 }
 
@@ -259,7 +275,7 @@ function extractDate_(data){
   
   if (info1pos > 0) {
     info1pos = data.indexOf(">", info1pos+infoMarker.length);
-    var info2pos = data.indexOf("</p>", info1pos+1);
+    var info2pos = data.indexOf("</div>", info1pos+1);
     return data.substring(info1pos+1, info2pos);
   }
   else
@@ -271,14 +287,15 @@ function extractDate_(data){
 */
 function extractImage_(data, endListingMarkerPos){
   
-  var imgStartMarker = "data-imgSrc=";
+  /* 11 Juin 2018: ce code ne marche pas car le source retourné par le site ne contient pas les images */
+  var imgStartMarker = "<img class src=";
   var imageStart = data.indexOf(imgStartMarker);
   if ((imageStart < 0) || (imageStart > endListingMarkerPos)) {
     return "https://www.leboncoin.fr/img/no-picture-adview.png";
   }
   else {
     
-    var imageEnd = data.indexOf("data-imgAlt=", imageStart);
+    var imageEnd = data.indexOf("itemprop=\"image", imageStart);
     var image = data.substring(imageStart + imgStartMarker.length + 1, imageEnd - 2);
     
     if (image.indexOf("http") < 0) {
@@ -294,9 +311,11 @@ function extractImage_(data, endListingMarkerPos){
 function extractListing_(text){
   
   /* var debut = text.indexOf("<section id=\"listingAds\""); */
-  var debut = text.indexOf("<!-- Listing list -->");
+  /* var debut = text.indexOf("<!-- Listing list -->"); */
+  var debut = text.indexOf("<div class=\"react-tabs__tab-panel react-tabs__tab-panel--selected");
   debut = text.indexOf("<li ", debut);
-  var fin = text.indexOf("<!-- Google Adsense -->", debut);
+  
+  var fin = text.indexOf("<div class=\"react-tabs__tab-panel\" role=\"tabpanel\"", debut);
 
   if (fin > debut)
     return text.substring(debut,fin);
