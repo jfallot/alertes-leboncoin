@@ -1,5 +1,8 @@
 /*
  * ChangeLog
+ * 14 Juin 2018 - Refonte du code de parsing pour utiliser la structure window.FLUX_STATE (en JSON) au lieu de l'HTML.
+                - Ajout du texte de description de l'objet dans l'email en cas de parsing Json
+                - Le mode Html est conservé pour les recherches ne retournant pas de JSon
  * 11 Juin 2018 - Adaptation aux changements importants implémentés fin mai/début juin. Les images ne peuvent cependant plus être récupérées.
  * 14 Sept 2017 - Correction: images n'apparaissant plus dans les emails* 06 Mars 2016 - Adaptation au nouveau site du Bon Coin, ainsi que quelques nettoyages
  * 01 Aout 2017 - Gère le cas où aucun prix n'est précisé dans l'annonce
@@ -25,150 +28,268 @@ var menuNumberOfRowsToKeepInLog = "Nombre de lignes à conserver dans le log lor
 var scriptProperties = PropertiesService.getScriptProperties();
 
 function lbc(sendMail) {
-	if (sendMail != false) {
-		sendMail = true;
-	}
+  if (sendMail != false) {
+    sendMail = true;
+  }
 
-	var to = scriptProperties.getProperty('email');
-	if (to == "" || to == null) {
-		Browser.msgBox("L'email du destinataire n'est pas défini. Allez dans le menu \"" + menuLabel + "\" puis \"" + menuMailSetupLabel + "\".");
-	} else {
-		var ss = SpreadsheetApp.getActiveSpreadsheet();
-		var sheet = ss.getSheetByName("Recherches");
-		var slog = ss.getSheetByName("Log");
-		var i = 0;
-		var nbSearchWithRes = 0;
-		var nbResTot = 0;
-		var body = "";
-		var corps = "";
-		var announceHTML = "";
-		var bodyHTML = "";
-		var summary = "";
-		var searchURL = "";
-		var searchName = "";
+  var to = scriptProperties.getProperty('email');
+  if (to == "" || to == null) {
+    Browser.msgBox("L'email du destinataire n'est pas défini. Allez dans le menu \"" + menuLabel + "\" puis \"" + menuMailSetupLabel + "\".");
+  } else {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getSheetByName("Recherches");
+    var slog = ss.getSheetByName("Log");
+    var searchIdx = 0;
+    var nbSearchWithRes = 0;
+    var nbResTot = 0;
+    var corps = "";
+    var bodyHTML = "";
+    var summary = "";
+    var searchURL = "";
+    var searchName = "";
 
-		while ((searchURL = sheet.getRange(2 + i, 2).getValue()) != "") {
+    var jsonStartTag = "<script>window.FLUX_STATE = ";
+    var jsonStartPos = -1;
 
-			searchName = sheet.getRange(2 + i, 1).getValue();
-			Logger.log("#### Recherche pour " + searchName);
-			var nbRes = 0;
-			body = "";
-			announceHTML = "";
+    while ((searchURL = sheet.getRange(2 + searchIdx, 2).getValue()) != "") {
 
-			var rep = UrlFetchApp.fetch(searchURL).getContentText("utf-8");
+      searchName = sheet.getRange(2 + searchIdx, 1).getValue();
+      Logger.log("#### Recherche pour " + searchName);
 
-			if (rep.indexOf("Aucune annonce") < 0) {
+      var rep = UrlFetchApp.fetch(searchURL).getContentText("utf-8"); //Next page: add by example &page=2
 
-				var data = extractListing_(rep);
-				//data = data.substring(data.indexOf("<ul "));
+      // Serahc forthe window.FLUX_STATE JSON structure
+      jsonStartPos = rep.lastIndexOf(jsonStartTag);
+      var results = null;
 
-				var announceURL = extractA_(data);
-				var firstID = extractId_(announceURL);
+      if (jsonStartPos >= 0) {
 
-				if (sendMail == null || sendMail == true) {
+        // New: Browse ADs from the JSon
+        Logger.log("  -> JSON format");
+        
+        // Extract the JSon structure included in the source, between the tags "<script>window.FLUX_STATE = " and "</script>
+        var jsonSrc = rep.substring(jsonStartPos + jsonStartTag.length, rep.indexOf("</script>", jsonStartPos + jsonStartTag.length));
 
-					var lastSavedID = sheet.getRange(2 + i, 3).getValue();
+        var adStream = JSON.parse(jsonSrc);
+        var ads = adStream.adSearch.data.ads;
 
-					if (firstID != lastSavedID) {
+        results = processJSONAds(sheet, searchIdx, ads);
+          
+      } else {
 
-						var announceId = firstID;
+        // Compatibility: Browse ADS from the HTML
+        Logger.log("  -> HTML format");
+        
+        results = processHTMLAds(sheet, searchIdx, rep);
+      }
+      
+      if (results.nbRes > 0) {
+        
+        summary += "<li><a href=\"#" + searchName + "\">" + searchName + " (" + results.nbRes + ")</a></li>"
+        
+        if (scriptProperties.getProperty('log') == "true" || scriptProperties.getProperty('log') == null || scriptProperties.getProperty('log') == "") {
+          slog.insertRowBefore(2);
+          slog.getRange("A2").setValue(searchName);
+          slog.getRange("B2").setValue(results.nbRes);
+          var currentDate = new Date();
+          slog.getRange("C2").setValue(currentDate.getDate() + "/" + currentDate.getMonth() + "/" + currentDate.getYear() + " - " + currentDate.toLocaleTimeString().replace(" CEST", ""));
+          //slog.getRange("C2").setValue(new Date);
+        }
+        
+        nbResTot += results.nbRes;
+        nbSearchWithRes++
+      }
+      
+      bodyHTML += "<p style=\"display:block;clear:both;padding-top:2px;font-size:14px;font-weight:bold;background:#F1F1F5;\">Recherche <a name=\"" + searchName;
+      bodyHTML += "\" href=\"" + searchURL + "\"> " + searchName + " (" + results.nbRes + ")</a></p>";
+      bodyHTML += "<table border=\"0\" style=\"width:100%; vertical-align:middle; background:#FFFFFF;\"><tbody>" + results.announceHTML + "</tbody></table>";      
 
-						//While ID of announce is different from the saved one
-						do {
-							//Logger.log("data = " + data);
+      searchIdx++;
+    }
 
-							var endListingMarker = "</li>";
-							var endListingMarkerPos = data.indexOf(endListingMarker);
+    if (nbSearchWithRes > 1) {
+      //plusieurs recherches, on créé un summary
+      summary = "<ul>" + summary + "</ul>";
+      bodyHTML = summary + bodyHTML;
+      debug_(summary);
+    }
 
-							if (endListingMarkerPos > 0) {
+    debug_("Nb de res tot:" + nbResTot);
+    //on envoie le mail?
+    if (nbSearchWithRes > 0) {
+      var title = "Alerte leboncoin.fr : " + nbResTot + " nouveau" + (nbResTot > 1 ? "x" : "") + " résultat" + (nbResTot > 1 ? "s" : "");
+      debug_("titre msg : " + title);
+      corps = "Si cet email ne s’affiche pas correctement, veuillez sélectionner\nl’affichage HTML dans les paramètres de votre logiciel de messagerie.";
+      //debug_("corps msg : " + corps);
+      bodyHTML = "<body><meta charset=\"utf-8\">" + bodyHTML + "</body>";
+      debug_("bodyHTML msg : " + bodyHTML);
 
-								nbRes++;
+      if (bodyHTML.length > 200 * 1024) {
+        // Email body size is limited to 200 KB. Too big body is then truncated to avoid script to fail
+        bodyHTML = bodyHTML.substring(0, 200 * 1024 - 1);
+      }
 
-								var title = extractTitle_(data);
-								var place = extractPlace_(data);
-								var price = extractPrice_(data, endListingMarkerPos);
-								var vendpro = extractPro_(data);
-								var date  = extractDate_(data);
-								var image = extractImage_(data, endListingMarkerPos);
+      MailApp.sendEmail(to, title, corps, {
+        htmlBody: bodyHTML
+      });
+      debug_("Nb mail journalier restant : " + MailApp.getRemainingDailyQuota());
+    }
+  }
+}
 
-								announceHTML += "<tr style=\"height:1px; padding-bottom:10px;\"><td style=\"border-top:1px solid #ccc;\" colspan=\"2\"></td></tr>"
-								announceHTML += "<tr><td style=\"width:200px;padding-right:20px;\"><a href=\"" + announceURL + "\" target=\"" + announceId + "\"><img src=\"" + image + "\"></a></td>";
-								announceHTML += "<td style=\"align:left; padding-left:10px;\"><a href=\"" + announceURL + "\" target=\"" + announceId + "\" style=\"font-size: 14px;font-weight:bold;color:#369;text-decoration:none;\">";
-								announceHTML += title + vendpro + "</a> <div>" + place + "</div><div>" + date + "</div><div style=\"font-size:14px;font-weight:bold;\">" + price + "</div>";
-								announceHTML += "</td></tr>";
+/************************************************* JSON ********************************************/
+/**
+ * Extract the JSon structure included in the source, between the tags "<script>window.FLUX_STATE = " and "</script>
+ */
+function processJSONAds(sheet, searchIdx, ads) {
 
-                                Logger.log("i="+i+", announceId="+announceId);
-                              
-								//Skip the block already analyzed by searching next announce
-                                var nextAnnounce = data.indexOf("<li itemscope", endListingMarkerPos + endListingMarker.length)
-                                if (nextAnnounce > 0) {
-                                  data = data.substring(nextAnnounce);
-                                  announceURL = extractA_(data);
-                                  announceId  = extractId_(announceURL);
-                                }
-                                else
-                                   announceId = "";
-							} else
-								announceId = "";
+  var nbRes = 0;
+  var announceHTML = "";
+  var nbAds = ads.length;
+  
+  if (nbAds > 0) {
+    
+    var savedID = parseInt(sheet.getRange(2 + searchIdx, 3).getValue());
+    var firstID = ads[0].list_id;
+    
+    if (firstID != savedID) {
+      
+      var adsIdx = 0;
+      var announceId = firstID;
+      
+      //While ID of announce is different from the saved one
+      do {
+        var announceURL = ads[adsIdx].url;
+        var title = ads[adsIdx].subject;
+        
+        var description = ads[adsIdx].body;
+        if (description.length > 512)
+          description = description.substring(0, 511);
+        
+        var place = ads[adsIdx].location.city_label;
+        
+        var price = "";
+        if ((typeof ads[adsIdx].price != "undefined") && (ads[adsIdx].price.length > 0))
+        price = ads[adsIdx].price[0] + " €";
+        
+        var date = ads[adsIdx].first_publication_date;
+        
+        var image = ads[adsIdx].images.thumb_url;
+        if (image == null)
+          image = "https://www.leboncoin.fr/img/no-picture-adview.png";
+        
+        var vendpro = "";
+        
+        announceHTML += "<tr style=\"height:1px; padding-bottom:10px;\"><td style=\"border-top:1px solid #ccc;\" colspan=\"2\"></td></tr>"
+        announceHTML += "<tr><td style=\"width:200px;padding-right:20px;margin-top:0;\"><a href=\"" + announceURL + "\" target=\"" + announceId + "\"><img src=\"" + image + "\"></a></td>";
+        announceHTML += "<td style=\"align:left; padding-left:0px;\"><a href=\"" + announceURL + "\" target=\"" + announceId + "\" style=\"font-size: 14px;font-weight:bold;color:#369;text-decoration:none;\">";
+        announceHTML += title + vendpro + "</a> <div>" + place + " - " + date + "</div><div style=\"font-size:16px;font-weight:bold;color=#FF5A19;\">" + price + "</div>";
+        announceHTML += "<div>" + description + "</div>";
+        announceHTML += "</td></tr>";
+        
+        Logger.log("searchIdx=" + searchIdx + ", announceId=" + announceId);
+        
+        nbRes++;
+        adsIdx++;
+        
+        if (adsIdx < nbAds)
+          announceId = ads[adsIdx].list_id;
+        
+      } 
+      while ((adsIdx < nbAds) && (announceId != savedID))
+      
+      // Save the ID of the latest Ad
+      sheet.getRange(2 + searchIdx, 3).setValue(firstID);
+    }
+  }
+  else {
+    //pas de résultat
+    sheet.getRange(2 + searchIdx, 3).setValue(123);
+  }
+  
+  var results = new Object();
+  results["nbRes"] = nbRes;
+  results["announceHTML"] = announceHTML;
+  
+  return results;
+}
 
-						} while ((announceId != "") && (announceId != lastSavedID))
+/************************************************* HTML ********************************************/
 
-						if (nbRes > 0)
-							nbSearchWithRes++;
+/**
+ * Extract the ADs from the HTML structure
+ */
+function processHTMLAds(sheet, searchIdx, html) {
+  
+  var nbRes = 0;
+  var announceHTML = "";
+  
+  if (html.indexOf("Aucune annonce") < 0) {
+    
+    var data = extractListing_(html);
+    
+    var announceURL = extractA_(data);
+    var firstID = extractId_(announceURL);
+    var lastSavedID = sheet.getRange(2 + searchIdx, 3).getValue();
+    
+    if (firstID != lastSavedID) {
+      
+      var announceId = firstID;
+      
+      //While ID of announce is different from the saved one
+      do {
+        //Logger.log("data = " + data);
+        
+        var endListingMarker = "</li>";
+        var endListingMarkerPos = data.indexOf(endListingMarker);
+        
+        if (endListingMarkerPos > 0) {
+          
+          nbRes++;
+          
+          var title = extractTitle_(data);
+          var place = extractPlace_(data);
+          var price = extractPrice_(data, endListingMarkerPos);
+          var vendpro = extractPro_(data);
+          var date  = extractDate_(data);
+          var image = extractImage_(data, endListingMarkerPos);
+          
+          announceHTML += "<tr style=\"height:1px; padding-bottom:10px;\"><td style=\"border-top:1px solid #ccc;\" colspan=\"2\"></td></tr>"
+          announceHTML += "<tr><td style=\"width:200px;padding-right:20px;\"><a href=\"" + announceURL + "\" target=\"" + announceId + "\"><img src=\"" + image + "\"></a></td>";
+          announceHTML += "<td style=\"align:left; padding-left:0px;\"><a href=\"" + announceURL + "\" target=\"" + announceId + "\" style=\"font-size: 14px;font-weight:bold;color:#369;text-decoration:none;\">";
+          announceHTML += title + vendpro + "</a> <div>" + place + " - " + date + "</div><div style=\"font-size:16px;font-weight:bold;color=#FF5A19;\">" + price + "</div>";
+          announceHTML += "</td></tr>";
+          
+          Logger.log("searchIdx="+searchIdx+", announceId="+announceId);
+          
+          //Skip the block already analyzed by searching next announce
+          var nextAnnounce = data.indexOf("<li itemscope", endListingMarkerPos + endListingMarker.length)
+          if (nextAnnounce > 0) {
+            data = data.substring(nextAnnounce);
+            announceURL = extractA_(data);
+            announceId  = extractId_(announceURL);
+          }
+          else
+            announceId = "";
+        } else
+          announceId = "";
+        
+      } while ((announceId != "") && (announceId != lastSavedID))
+      
+    }
 
-						bodyHTML += "<p style=\"display:block;clear:both;padding-top:2px;font-size:14px;font-weight:bold;background:#F1F1F5;\">Recherche <a name=\"" + searchName;
-						bodyHTML += "\" href=\"" + searchURL + "\"> " + searchName + " (" + nbRes + ")</a></p>";
-						bodyHTML += "<table border=\"0\" style=\"width:100%; vertical-align:middle; background:#FFFFFF;\"><tbody>" + announceHTML + "</tbody></table>";
+    sheet.getRange(2 + searchIdx, 3).setValue(firstID);
 
-						summary += "<li><a href=\"#" + searchName + "\">" + searchName + " (" + nbRes + ")</a></li>"
-
-						if (scriptProperties.getProperty('log') == "true" || scriptProperties.getProperty('log') == null || scriptProperties.getProperty('log') == "") {
-							slog.insertRowBefore(2);
-							slog.getRange("A2").setValue(searchName);
-							slog.getRange("B2").setValue(nbRes);
-							var currentDate = new Date();
-							slog.getRange("C2").setValue(currentDate.getDate() + "/" + currentDate.getMonth() + "/" + currentDate.getYear() + " - " + currentDate.toLocaleTimeString().replace(" CEST", ""));
-							//slog.getRange("C2").setValue(new Date);
-						}
-					}
-				}
-				sheet.getRange(2 + i, 3).setValue(firstID);
-				nbResTot += nbRes;
-			} else {
-				//pas de résultat
-				sheet.getRange(2 + i, 3).setValue(123);
-			}
-			i++;
-		}
-
-		if (nbSearchWithRes > 1) {
-			//plusieurs recherches, on créé un summary
-			summary = "<p style=\"display:block;clear:both;padding-top:20px;font-size:14px;\">Accès rapide :</p><ul>" + summary + "</ul>";
-			bodyHTML = summary + bodyHTML;
-			debug_(summary);
-		}
-
-		debug_("Nb de res tot:" + nbResTot);
-		//on envoie le mail?
-		if (nbSearchWithRes > 0) {
-			var title = "Alerte leboncoin.fr : " + nbResTot + " nouveau" + (nbResTot > 1 ? "x" : "") + " résultat" + (nbResTot > 1 ? "s" : "");
-			debug_("titre msg : " + title);
-			corps = "Si cet email ne s’affiche pas correctement, veuillez sélectionner\nl’affichage HTML dans les paramètres de votre logiciel de messagerie.";
-			//debug_("corps msg : " + corps);
-			bodyHTML = "<body>" + bodyHTML + "</body>";
-			debug_("bodyHTML msg : " + bodyHTML);
-
-			if (bodyHTML.length > 200 * 1024) {
-				// Email body size is limited to 200 KB. Too big body is then truncated to avoid script to fail
-				bodyHTML = bodyHTML.substring(0, 200 * 1024 - 1);
-			}
-
-			MailApp.sendEmail(to, title, corps, {
-				htmlBody: bodyHTML
-			});
-			debug_("Nb mail journalier restant : " + MailApp.getRemainingDailyQuota());
-		}
-	}
+  } else {
+    //pas de résultat
+    sheet.getRange(2 + searchIdx, 3).setValue(123);
+  }
+  
+  var results = new Object();
+  results["nbRes"] = nbRes;
+  results["announceHTML"] = announceHTML;
+  
+  return results;
 }
 
 /**
@@ -210,16 +331,11 @@ function extractA_(data) {
  */
 function extractTitle_(data) {
 
-	/*var startTitle = data.indexOf("title=") + 7;
-	return data.substring(startTitle , data.indexOf("\"", startTitle) );*/
-
-	var startTitle = data.indexOf("<span itemprop=\"name\"");
-	if (startTitle > 0) {
-		startTitle = data.indexOf(">", startTitle);
-		return data.substring(startTitle + 1, data.indexOf("</span>", startTitle));
-	} else {
-		return "No title found";
-	}
+	startTitle = data.indexOf("title=") + 7;
+	if (startTitle > 0)  
+      return data.substring(startTitle , data.indexOf("\"", startTitle) );
+    else
+      return "No title found";
 }
 
 /**
@@ -242,14 +358,18 @@ function extractPro_(data) {
  * Extrait le lieu de l'annonce
  */
 function extractPlace_(data) {
-
-	var infopos = data.indexOf("itemprop=\"availableAtOrFrom\"");
-	infopos = data.indexOf(">", infopos);
-	if (infopos > 0) {
-
-		return data.substring(infopos + 1, data.indexOf("</p>", infopos + 1));
-	} else
-		return "";
+  
+  // Look for the 2nd "item_supp" block 
+  //var infoMarker = "itemProp=\"availableAtOrFrom\" itemscope";
+  var infoMarker = "<p class=\"item_supp\"";
+  var info1pos = data.indexOf(infoMarker);
+  info1pos = data.indexOf(infoMarker, info1pos + infoMarker.length);
+  if (info1pos > 0) {
+    var info2pos = data.indexOf(">", info1pos);
+    return data.substring(info2pos+1, data.indexOf("</p>", info2pos+1) );
+  }
+  else
+    return "";
 }
 
 /**
@@ -257,18 +377,14 @@ function extractPlace_(data) {
  */
 function extractPrice_(data, endListingMarkerPos) {
 
-	var priceMarker = "<span itemprop=\"price\"";
+	var priceMarker = "<h3 class=\"item_price\"";
 	var priceStart = data.indexOf(priceMarker);
 
 	if ((priceStart < 0) || (priceStart > endListingMarkerPos)) {
 		return "";
-	} else {
-		var endSpanMarker = "</span>";
+	} else {     
 		var price2Start = data.indexOf(">", priceStart + priceMarker.length);
-		var priceEnd = data.indexOf(endSpanMarker, price2Start + 1);
-		var priceNumber = data.substring(price2Start + 1, priceEnd);
-		var priceCurrency = data.substring(priceEnd + endSpanMarker.length, data.indexOf(endSpanMarker, priceEnd + endSpanMarker.length));
-		return priceNumber + priceCurrency;
+		return data.substring(price2Start+1, data.indexOf("</h3>", price2Start+1) );
 	}
 }
 
@@ -276,16 +392,18 @@ function extractPrice_(data, endListingMarkerPos) {
  * Extrait la date de l'annonce
  */
 function extractDate_(data) {
-
-	var infoMarker = "itemprop=\"availabilityStarts\"";
-	var info1pos = data.indexOf(infoMarker);
-
-	if (info1pos > 0) {
-		info1pos = data.indexOf(">", info1pos + infoMarker.length);
-		var info2pos = data.indexOf("</div>", info1pos + 1);
-		return data.substring(info1pos + 1, info2pos);
-	} else
-		return "";
+  
+  var infoMarker = "itemprop=\"availabilityStarts\"";
+  var info1pos = data.indexOf(infoMarker);
+  
+  if (info1pos > 0) {
+    info1pos = data.indexOf(">", info1pos+infoMarker.length);
+    
+    var info2pos = data.indexOf("</p>", info1pos+1);
+    return data.substring(info1pos+1, info2pos);
+  }
+  else
+    return "";
 }
 
 /**
@@ -293,21 +411,17 @@ function extractDate_(data) {
  */
 function extractImage_(data, endListingMarkerPos) {
 
-	/* 11 Juin 2018: ce code ne marche pas car le source retourné par le site ne contient pas les images */
-	var imgStartMarker = "<img class src=";
-	var imageStart = data.indexOf(imgStartMarker);
-	if ((imageStart < 0) || (imageStart > endListingMarkerPos)) {
-		return "https://www.leboncoin.fr/img/no-picture-adview.png";
-	} else {
-
-		var imageEnd = data.indexOf("itemprop=\"image", imageStart);
-		var image = data.substring(imageStart + imgStartMarker.length + 1, imageEnd - 2);
-
-		if (image.indexOf("http") < 0) {
-			image = image.replace("//", "http://");
-		}
-		return image;
-	}
+  var imgStartMarker = "data-imgSrc=";
+  var imageStart = data.indexOf(imgStartMarker);
+  if ((imageStart < 0) || (imageStart > endListingMarkerPos)) {
+    return "https://www.leboncoin.fr/img/no-picture-adview.png";
+  }
+  else {
+    
+    var imageEnd = data.indexOf("data-imgAlt=", imageStart);
+    var image = data.substring(imageStart + imgStartMarker.length + 1, imageEnd - 2);
+    return image;
+  }    
 }
 
 /**
@@ -317,10 +431,10 @@ function extractListing_(text) {
 
 	/* var debut = text.indexOf("<section id=\"listingAds\""); */
 	/* var debut = text.indexOf("<!-- Listing list -->"); */
-	var debut = text.indexOf("<div class=\"react-tabs__tab-panel react-tabs__tab-panel--selected");
+	var debut = text.indexOf("<section class=\"tabsContent block-white dontSwitch");
 	debut = text.indexOf("<li itemscope", debut);
 
-	var fin = text.indexOf("<div class=\"react-tabs__tab-panel\" role=\"tabpanel\"", debut);
+	var fin = text.indexOf("</ul>", debut);
 
 	if (fin > debut)
 		return text.substring(debut, fin);
@@ -328,185 +442,186 @@ function extractListing_(text) {
 		return "";
 }
 
+/************************************************* GENERAL ********************************************/
 //Activer/Désactiver les logs
 function dolog() {
-	if (scriptProperties.getProperty('log') == "true") {
-		scriptProperties.setProperty('log', false);
-		Browser.msgBox("Les logs ont été désactivées.");
-	} else if (scriptProperties.getProperty('log') == "false") {
-		scriptProperties.setProperty('log', true);
-		Browser.msgBox("Les logs ont été activées.");
-	} else {
-		scriptProperties.setProperty('log', false);
-		Browser.msgBox("Les logs ont été désactivées.");
-	}
+  if (scriptProperties.getProperty('log') == "true") {
+    scriptProperties.setProperty('log', false);
+    Browser.msgBox("Les logs ont été désactivées.");
+  } else if (scriptProperties.getProperty('log') == "false") {
+    scriptProperties.setProperty('log', true);
+    Browser.msgBox("Les logs ont été activées.");
+  } else {
+    scriptProperties.setProperty('log', false);
+    Browser.msgBox("Les logs ont été désactivées.");
+  }
 }
 
 function setup() {
-	lbc(false);
+  lbc(false);
 }
 
 function setupMail() {
-	if (scriptProperties.getProperty('email') == "" || scriptProperties.getProperty('email') == null) {
-		var quest = Browser.inputBox("Entrez votre email, le programme ne vérifie pas le contenu de cette boite.", Browser.Buttons.OK_CANCEL);
-		if (quest == "cancel") {
-			Browser.msgBox("Ajout email annulé.");
-			return false;
-		} else {
-			scriptProperties.setProperty('email', quest);
-			Browser.msgBox("Email " + scriptProperties.getProperty('email') + " ajouté");
-		}
-	} else {
-		var quest = Browser.inputBox("Entrez un email pour modifier l'email : " + scriptProperties.getProperty('email'), Browser.Buttons.OK_CANCEL);
-		if (quest == "cancel") {
-			Browser.msgBox("Modification email annulé.");
-			return false;
-		} else {
-			scriptProperties.setProperty('email', quest);
-			Browser.msgBox("Email " + scriptProperties.getProperty('email') + " ajouté");
-		}
-	}
+  if (scriptProperties.getProperty('email') == "" || scriptProperties.getProperty('email') == null) {
+    var quest = Browser.inputBox("Entrez votre email, le programme ne vérifie pas le contenu de cette boite.", Browser.Buttons.OK_CANCEL);
+    if (quest == "cancel") {
+      Browser.msgBox("Ajout email annulé.");
+      return false;
+    } else {
+      scriptProperties.setProperty('email', quest);
+      Browser.msgBox("Email " + scriptProperties.getProperty('email') + " ajouté");
+    }
+  } else {
+    var quest = Browser.inputBox("Entrez un email pour modifier l'email : " + scriptProperties.getProperty('email'), Browser.Buttons.OK_CANCEL);
+    if (quest == "cancel") {
+      Browser.msgBox("Modification email annulé.");
+      return false;
+    } else {
+      scriptProperties.setProperty('email', quest);
+      Browser.msgBox("Email " + scriptProperties.getProperty('email') + " ajouté");
+    }
+  }
 }
 
 //Archiver les logs
 function archivelog() {
-	var ss = SpreadsheetApp.getActiveSpreadsheet();
-	var slog = ss.getSheetByName("Log");
-	var today = new Date();
-	var newname = "LogArchive " + today.getFullYear() + (today.getMonth() + 1) + today.getDate();
-	slog.setName(newname);
-	var newsheet = ss.insertSheet("Log", 1);
-	newsheet.getRange("A1").setValue("Recherche");
-	newsheet.getRange("B1").setValue("Nb Résultats");
-	newsheet.getRange("C1").setValue("Date");
-	newsheet.getRange(1, 1, 2, 3).setBorder(true, true, true, true, true, true);
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var slog = ss.getSheetByName("Log");
+  var today = new Date();
+  var newname = "LogArchive " + today.getFullYear() + (today.getMonth() + 1) + today.getDate();
+  slog.setName(newname);
+  var newsheet = ss.insertSheet("Log", 1);
+  newsheet.getRange("A1").setValue("Recherche");
+  newsheet.getRange("B1").setValue("Nb Résultats");
+  newsheet.getRange("C1").setValue("Date");
+  newsheet.getRange(1, 1, 2, 3).setBorder(true, true, true, true, true, true);
 }
 
 function setupNumberOfRowsToKeepInLog() {
-	if (ScriptProperties.getProperty('NumberOfRowsToKeepInLog') == "" || ScriptProperties.getProperty('NumberOfRowsToKeepInLog') == null) {
-		var quest = Browser.inputBox("Indiquez le nombre de lignes à conserver dans le log lors d'une purge : ", Browser.Buttons.OK_CANCEL);
-		if (quest == "cancel") {
-			Browser.msgBox("Paramétrage du nombre de lignes à conserver dans le log annulé, valeur inchangée (= " + ScriptProperties.getProperty('NumberOfRowsToKeepInLog') + ")");
-			return false;
-		} else if (isNaN(quest)) {
-			Browser.msgBox("Vous devez entrer une valeur numérique entière");
-			setupNumberOfRowsToKeepInLog()
-		} else {
-			if (quest == 0) {
-				quest = 1;
-			} else if (quest != "") {
-				quest++;
-			} else {
-				quest = null;
-			} //On préserve la première ligne contenant les entêtes de colone
-			ScriptProperties.setProperty('NumberOfRowsToKeepInLog', quest);
-			Browser.msgBox("Nombre de lignes à conserver dans le fichier de log lors d'une purge paramétré à : " + ScriptProperties.getProperty('NumberOfRowsToKeepInLog') + " (Notez que la première ligne contenant les entêtes de colone sera conservée)");
-			return true;
-		}
-	} else {
-		var quest = Browser.inputBox("Indiquez le nombre de lignes à conserver dans le log lors d'une purge : (valeur actuelle = ", +ScriptProperties.getProperty('NumberOfRowsToKeepInLog') + ")", Browser.Buttons.OK_CANCEL);
-		if (quest == "cancel") {
-			Browser.msgBox("Paramétrage du nombre de lignes à conserver dans le log annulé, valeur inchangée (= " + ScriptProperties.getProperty('NumberOfRowsToKeepInLog') + ")");
-			return false;
-		} else if (isNaN(quest)) {
-			Browser.msgBox("Vous devez entrer une valeur numérique entière");
-			setupNumberOfRowsToKeepInLog()
-		} else {
-			if (quest == 0) {
-				quest = 1;
-			} else if (quest != "") {
-				quest++;
-			} else {
-				quest = null;
-			} //On préserve la première ligne contenant les entêtes de colone
-			ScriptProperties.setProperty('NumberOfRowsToKeepInLog', quest);
-			Browser.msgBox("Nombre de lignes à conserver dans le fichier de log lors d'une purge paramétré à : " + ScriptProperties.getProperty('NumberOfRowsToKeepInLog') + " (Notez que la première ligne contenant les entêtes de colone sera conservée)");
-			return true;
-		}
-	}
+  if (ScriptProperties.getProperty('NumberOfRowsToKeepInLog') == "" || ScriptProperties.getProperty('NumberOfRowsToKeepInLog') == null) {
+    var quest = Browser.inputBox("Indiquez le nombre de lignes à conserver dans le log lors d'une purge : ", Browser.Buttons.OK_CANCEL);
+    if (quest == "cancel") {
+      Browser.msgBox("Paramétrage du nombre de lignes à conserver dans le log annulé, valeur inchangée (= " + ScriptProperties.getProperty('NumberOfRowsToKeepInLog') + ")");
+      return false;
+    } else if (isNaN(quest)) {
+      Browser.msgBox("Vous devez entrer une valeur numérique entière");
+      setupNumberOfRowsToKeepInLog()
+    } else {
+      if (quest == 0) {
+        quest = 1;
+      } else if (quest != "") {
+        quest++;
+      } else {
+        quest = null;
+      } //On préserve la première ligne contenant les entêtes de colone
+      ScriptProperties.setProperty('NumberOfRowsToKeepInLog', quest);
+      Browser.msgBox("Nombre de lignes à conserver dans le fichier de log lors d'une purge paramétré à : " + ScriptProperties.getProperty('NumberOfRowsToKeepInLog') + " (Notez que la première ligne contenant les entêtes de colone sera conservée)");
+      return true;
+    }
+  } else {
+    var quest = Browser.inputBox("Indiquez le nombre de lignes à conserver dans le log lors d'une purge : (valeur actuelle = ", +ScriptProperties.getProperty('NumberOfRowsToKeepInLog') + ")", Browser.Buttons.OK_CANCEL);
+    if (quest == "cancel") {
+      Browser.msgBox("Paramétrage du nombre de lignes à conserver dans le log annulé, valeur inchangée (= " + ScriptProperties.getProperty('NumberOfRowsToKeepInLog') + ")");
+      return false;
+    } else if (isNaN(quest)) {
+      Browser.msgBox("Vous devez entrer une valeur numérique entière");
+      setupNumberOfRowsToKeepInLog()
+    } else {
+      if (quest == 0) {
+        quest = 1;
+      } else if (quest != "") {
+        quest++;
+      } else {
+        quest = null;
+      } //On préserve la première ligne contenant les entêtes de colone
+      ScriptProperties.setProperty('NumberOfRowsToKeepInLog', quest);
+      Browser.msgBox("Nombre de lignes à conserver dans le fichier de log lors d'une purge paramétré à : " + ScriptProperties.getProperty('NumberOfRowsToKeepInLog') + " (Notez que la première ligne contenant les entêtes de colone sera conservée)");
+      return true;
+    }
+  }
 }
 
 function purgeLog() {
-	if (ScriptProperties.getProperty('NumberOfRowsToKeepInLog') == "" || ScriptProperties.getProperty('NumberOfRowsToKeepInLog') == null) {
-		if (setupNumberOfRowsToKeepInLog() == false) {
-			Browser.msgBox("Purge annulée, le nombre de lignes à conserver dans le log n'est pas paramétré");
-		}
-	}
-	if (ScriptProperties.getProperty('NumberOfRowsToKeepInLog') != "" && ScriptProperties.getProperty('NumberOfRowsToKeepInLog') != null) {
-		var ss = SpreadsheetApp.getActiveSpreadsheet();
-		var sheet = ss.getSheetByName("Log");
-		var howmany = sheet.getLastRow() - ScriptProperties.getProperty('NumberOfRowsToKeepInLog')
-		if (howmany > 0) {
-			sheet.deleteRows(ScriptProperties.getProperty('NumberOfRowsToKeepInLog'), howmany);
-		}
-	}
+  if (ScriptProperties.getProperty('NumberOfRowsToKeepInLog') == "" || ScriptProperties.getProperty('NumberOfRowsToKeepInLog') == null) {
+    if (setupNumberOfRowsToKeepInLog() == false) {
+      Browser.msgBox("Purge annulée, le nombre de lignes à conserver dans le log n'est pas paramétré");
+    }
+  }
+  if (ScriptProperties.getProperty('NumberOfRowsToKeepInLog') != "" && ScriptProperties.getProperty('NumberOfRowsToKeepInLog') != null) {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getSheetByName("Log");
+    var howmany = sheet.getLastRow() - ScriptProperties.getProperty('NumberOfRowsToKeepInLog')
+    if (howmany > 0) {
+      sheet.deleteRows(ScriptProperties.getProperty('NumberOfRowsToKeepInLog'), howmany);
+    }
+  }
 }
 
 function onOpen() {
-	var sheet = SpreadsheetApp.getActiveSpreadsheet();
-	var entries = [{
-			name: menuMailSetupLabel,
-			functionName: "setupMail"
-		}, {
-			name: menuSearchSetupLabel,
-			functionName: "setup"
-		},
-		null, {
-			name: menuSearchLabel,
-			functionName: "lbc"
-		},
-		null, {
-			name: menuLog,
-			functionName: "dolog"
-		}, {
-			name: menuArchiveLog,
-			functionName: "archivelog"
-		}, {
-			name: menuPurgeLog,
-			functionName: "purgeLog"
-		}, {
-			name: menuNumberOfRowsToKeepInLog,
-			functionName: "setupNumberOfRowsToKeepInLog"
-		}
-	];
-	sheet.addMenu(menuLabel, entries);
+  var sheet = SpreadsheetApp.getActiveSpreadsheet();
+  var entries = [{
+      name: menuMailSetupLabel,
+      functionName: "setupMail"
+    }, {
+      name: menuSearchSetupLabel,
+      functionName: "setup"
+    },
+    null, {
+      name: menuSearchLabel,
+      functionName: "lbc"
+    },
+    null, {
+      name: menuLog,
+      functionName: "dolog"
+    }, {
+      name: menuArchiveLog,
+      functionName: "archivelog"
+    }, {
+      name: menuPurgeLog,
+      functionName: "purgeLog"
+    }, {
+      name: menuNumberOfRowsToKeepInLog,
+      functionName: "setupNumberOfRowsToKeepInLog"
+    }
+  ];
+  sheet.addMenu(menuLabel, entries);
 }
 
 function onInstall() {
-	onOpen();
+  onOpen();
 }
 
 /**
  * Retourne la date
  */
 function myDate_() {
-	var today = new Date();
-	debug_(today.getDate() + "/" + (today.getMonth() + 1) + "/" + today.getFullYear());
-	return today.getDate() + "/" + (today.getMonth() + 1) + "/" + today.getFullYear();
+  var today = new Date();
+  debug_(today.getDate() + "/" + (today.getMonth() + 1) + "/" + today.getFullYear());
+  return today.getDate() + "/" + (today.getMonth() + 1) + "/" + today.getFullYear();
 }
 
 /**
  * Retourne l'heure
  */
 function myTime_() {
-	var temps = new Date();
-	var h = temps.getHours();
-	var m = temps.getMinutes();
-	if (h < "10") {
-		h = "0" + h;
-	}
-	if (m < "10") {
-		m = "0" + m;
-	}
-	debug_(h + ":" + m);
-	return h + ":" + m;
+  var temps = new Date();
+  var h = temps.getHours();
+  var m = temps.getMinutes();
+  if (h < "10") {
+    h = "0" + h;
+  }
+  if (m < "10") {
+    m = "0" + m;
+  }
+  debug_(h + ":" + m);
+  return h + ":" + m;
 }
 
 /**
  * Debug
  */
 function debug_(msg) {
-	if (debug != null && debug) {
-		Browser.msgBox(msg);
-	}
+  if (debug != null && debug) {
+    Browser.msgBox(msg);
+  }
 }
