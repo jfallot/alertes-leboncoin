@@ -7,6 +7,9 @@ Fork du projet de St3ph-fr (https://plus.google.com/u/0/b/116856005769817085204/
 Pour créer rapidement votre feuille de recherche: https://goo.gl/1daGn2
 
 Historique des modifications :
+ * 14 Juin 2018 - Refonte du code de parsing pour utiliser la structure window.FLUX_STATE (en JSON) au lieu de l'HTML.
+                - Ajout du texte de description de l'objet dans l'email en cas de parsing Json
+                - Le mode Html est conservé pour les recherches ne retournant pas de JSon
  * 11 Juin 2018 - Adaptation aux changements importants implémentés fin mai/début juin. Les images ne peuvent cependant plus être récupérées.
  * 14 Sept 2017 - Correction: images n'apparaissant plus dans les emails
  * 01 Aout 2017 - Gère le cas où aucun prix n'est précisé dans l'annonce
