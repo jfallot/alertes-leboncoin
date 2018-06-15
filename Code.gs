@@ -1,5 +1,6 @@
 /*
  * ChangeLog
+ * 15 juin 2018 - Améliorations cosmétiques dans l'email 
  * 14 Juin 2018 - Refonte du code de parsing pour utiliser la structure window.FLUX_STATE (en JSON) au lieu de l'HTML.
                 - Ajout du texte de description de l'objet dans l'email en cas de parsing Json
                 - Le mode Html est conservé pour les recherches ne retournant pas de JSon
@@ -191,9 +192,9 @@ function processJSONAds(sheet, searchIdx, ads) {
         
         announceHTML += "<tr style=\"height:1px; padding-bottom:10px;\"><td style=\"border-top:1px solid #ccc;\" colspan=\"2\"></td></tr>"
         announceHTML += "<tr><td style=\"width:200px;padding-right:0px;margin-top:0;\"><a href=\"" + announceURL + "\" target=\"" + announceId + "\"><img src=\"" + image + "\"></a></td>";
-        announceHTML += "<td style=\"align:left; padding-left:2px;\"><a href=\"" + announceURL + "\" target=\"" + announceId + "\" style=\"font-size:14px;font-weight:bold;color:#369;text-decoration:none;\">";
-        announceHTML += title + vendpro + "</a> <div>" + place + " - " + dateStr + "</div><div style=\"font-size:16px;font-weight:bold;color:#FF5A19;\">" + price + "</div>";
-        announceHTML += "<div>" + description + "</div>";
+        announceHTML += "<td style=\"align:left;padding-left:2px;vertical-align:top;\"><a href=\"" + announceURL + "\" target=\"" + announceId + "\" style=\"font-size:16px;font-weight:bold;color:#369;text-decoration:none;\">";
+        announceHTML += title + vendpro + "</a><div><span style=\"font-weight:bold;\">" + place + "</span> - " + dateStr + "</div><div style=\"font-size:16px;font-weight:bold;color:#FF5A19;\">" + price + "</div>";
+        announceHTML += "<div style=\"font-size:10pt;color:#767676;\">" + description + "</div>";
         announceHTML += "</td></tr>";
         
         Logger.log("searchIdx=" + searchIdx + ", announceId=" + announceId);
@@ -265,8 +266,8 @@ function processHTMLAds(sheet, searchIdx, html) {
           
           announceHTML += "<tr style=\"height:1px; padding-bottom:10px;\"><td style=\"border-top:1px solid #ccc;\" colspan=\"2\"></td></tr>"
           announceHTML += "<tr><td style=\"width:200px;padding-right:2px;\"><a href=\"" + announceURL + "\" target=\"" + announceId + "\"><img src=\"" + image + "\"></a></td>";
-          announceHTML += "<td style=\"align:left; padding-left:0px;\"><a href=\"" + announceURL + "\" target=\"" + announceId + "\" style=\"font-size:14px;font-weight:bold;color:#369;text-decoration:none;\">";
-          announceHTML += title + vendpro + "</a> <div>" + place + " - " + date + "</div><div style=\"font-size:16px;font-weight:bold;color:#FF5A19;\">" + price + "</div>";
+          announceHTML += "<td style=\"align:left;padding-left:0px;vertical-align:top;\"><a href=\"" + announceURL + "\" target=\"" + announceId + "\" style=\"font-size:16px;font-weight:bold;color:#369;text-decoration:none;\">";
+          announceHTML += title + vendpro + "</a><div><span style=\"font-weight:bold;\">" + place + "</span> - " + date + "</div><div style=\"font-size:16px;font-weight:bold;color:#FF5A19;\">" + price + "</div>";
           announceHTML += "</td></tr>";
           
           Logger.log("searchIdx="+searchIdx+", announceId="+announceId);
