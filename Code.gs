@@ -25,7 +25,7 @@ var menuArchiveLog = "Archiver les logs";
 var menuPurgeLog = "Purger le log";
 var menuNumberOfRowsToKeepInLog = "Nombre de lignes à conserver dans le log lors d'une purge";
 
-var scriptProperties = PropertiesService.getScriptProperties();
+var scriptProperties = PropertiesService.getScriptProperties(); 
 
 function lbc(sendMail) {
   if (sendMail != false) {
@@ -121,7 +121,7 @@ function lbc(sendMail) {
       debug_("titre msg : " + title);
       corps = "Si cet email ne s’affiche pas correctement, veuillez sélectionner\nl’affichage HTML dans les paramètres de votre logiciel de messagerie.";
       //debug_("corps msg : " + corps);
-      bodyHTML = "<body><meta charset=\"utf-8\">" + bodyHTML + "</body>";
+      bodyHTML = "<body style=\"font-family: Roboto,RobotoDraft,Helvetica,Arial,sans-serif;\"><meta charset=\"utf-8\">" + bodyHTML + "</body>";
       debug_("bodyHTML msg : " + bodyHTML);
 
       if (bodyHTML.length > 200 * 1024) {
@@ -143,6 +143,11 @@ function lbc(sendMail) {
  */
 function processJSONAds(sheet, searchIdx, ads) {
 
+  var dateFormatOptions = {  
+    weekday: "long", month: "short", year: "numeric",  
+    day: "numeric", hour: "2-digit", minute: "2-digit"  
+  };
+  
   var nbRes = 0;
   var announceHTML = "";
   var nbAds = ads.length;
@@ -172,7 +177,11 @@ function processJSONAds(sheet, searchIdx, ads) {
         if ((typeof ads[adsIdx].price != "undefined") && (ads[adsIdx].price.length > 0))
         price = ads[adsIdx].price[0] + " €";
         
-        var date = ads[adsIdx].first_publication_date;
+        var dateOri = ads[adsIdx].first_publication_date;
+        // Modify date format to match ISO 9601 one
+        dateOri = dateOri.replace(" ", "T");
+        var date = new Date(dateOri);
+        var dateStr = date.toLocaleDateString("fr-FR", dateFormatOptions) + ", " + date.toLocaleTimeString("fr-FR", dateFormatOptions)
         
         var image = ads[adsIdx].images.thumb_url;
         if (image == null)
@@ -181,9 +190,9 @@ function processJSONAds(sheet, searchIdx, ads) {
         var vendpro = "";
         
         announceHTML += "<tr style=\"height:1px; padding-bottom:10px;\"><td style=\"border-top:1px solid #ccc;\" colspan=\"2\"></td></tr>"
-        announceHTML += "<tr><td style=\"width:200px;padding-right:20px;margin-top:0;\"><a href=\"" + announceURL + "\" target=\"" + announceId + "\"><img src=\"" + image + "\"></a></td>";
-        announceHTML += "<td style=\"align:left; padding-left:0px;\"><a href=\"" + announceURL + "\" target=\"" + announceId + "\" style=\"font-size: 14px;font-weight:bold;color:#369;text-decoration:none;\">";
-        announceHTML += title + vendpro + "</a> <div>" + place + " - " + date + "</div><div style=\"font-size:16px;font-weight:bold;color=#FF5A19;\">" + price + "</div>";
+        announceHTML += "<tr><td style=\"width:200px;padding-right:0px;margin-top:0;\"><a href=\"" + announceURL + "\" target=\"" + announceId + "\"><img src=\"" + image + "\"></a></td>";
+        announceHTML += "<td style=\"align:left; padding-left:2px;\"><a href=\"" + announceURL + "\" target=\"" + announceId + "\" style=\"font-size:14px;font-weight:bold;color:#369;text-decoration:none;\">";
+        announceHTML += title + vendpro + "</a> <div>" + place + " - " + dateStr + "</div><div style=\"font-size:16px;font-weight:bold;color:#FF5A19;\">" + price + "</div>";
         announceHTML += "<div>" + description + "</div>";
         announceHTML += "</td></tr>";
         
@@ -255,9 +264,9 @@ function processHTMLAds(sheet, searchIdx, html) {
           var image = extractImage_(data, endListingMarkerPos);
           
           announceHTML += "<tr style=\"height:1px; padding-bottom:10px;\"><td style=\"border-top:1px solid #ccc;\" colspan=\"2\"></td></tr>"
-          announceHTML += "<tr><td style=\"width:200px;padding-right:20px;\"><a href=\"" + announceURL + "\" target=\"" + announceId + "\"><img src=\"" + image + "\"></a></td>";
-          announceHTML += "<td style=\"align:left; padding-left:0px;\"><a href=\"" + announceURL + "\" target=\"" + announceId + "\" style=\"font-size: 14px;font-weight:bold;color:#369;text-decoration:none;\">";
-          announceHTML += title + vendpro + "</a> <div>" + place + " - " + date + "</div><div style=\"font-size:16px;font-weight:bold;color=#FF5A19;\">" + price + "</div>";
+          announceHTML += "<tr><td style=\"width:200px;padding-right:2px;\"><a href=\"" + announceURL + "\" target=\"" + announceId + "\"><img src=\"" + image + "\"></a></td>";
+          announceHTML += "<td style=\"align:left; padding-left:0px;\"><a href=\"" + announceURL + "\" target=\"" + announceId + "\" style=\"font-size:14px;font-weight:bold;color:#369;text-decoration:none;\">";
+          announceHTML += title + vendpro + "</a> <div>" + place + " - " + date + "</div><div style=\"font-size:16px;font-weight:bold;color:#FF5A19;\">" + price + "</div>";
           announceHTML += "</td></tr>";
           
           Logger.log("searchIdx="+searchIdx+", announceId="+announceId);
