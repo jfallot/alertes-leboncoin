@@ -1,5 +1,6 @@
 /*
  * ChangeLog
+ * 17 juin 2018 - Meilleure gestion du cas où une recherche en format JSON ne retourne aucun résultat
  * 15 juin 2018 - Améliorations cosmétiques dans l'email 
  * 14 Juin 2018 - Refonte du code de parsing pour utiliser la structure window.FLUX_STATE (en JSON) au lieu de l'HTML.
                 - Ajout du texte de description de l'objet dans l'email en cas de parsing Json
@@ -99,21 +100,23 @@ function lbc(sendMail) {
         
         nbResTot += results.nbRes;
         nbSearchWithRes++
+
+        bodyHTML += "<p style=\"display:block;clear:both;padding-top:2px;font-size:14px;font-weight:bold;background:#F1F1F5;\">Recherche <a name=\"" + searchName;
+        bodyHTML += "\" href=\"" + searchURL + "\"> " + searchName + " (" + results.nbRes + ")</a></p>";
+        bodyHTML += "<table border=\"0\" style=\"width:100%; vertical-align:middle; background:#FFFFFF;\"><tbody>" + results.announceHTML + "</tbody></table>";      
       }
-      
-      bodyHTML += "<p style=\"display:block;clear:both;padding-top:2px;font-size:14px;font-weight:bold;background:#F1F1F5;\">Recherche <a name=\"" + searchName;
-      bodyHTML += "\" href=\"" + searchURL + "\"> " + searchName + " (" + results.nbRes + ")</a></p>";
-      bodyHTML += "<table border=\"0\" style=\"width:100%; vertical-align:middle; background:#FFFFFF;\"><tbody>" + results.announceHTML + "</tbody></table>";      
 
       searchIdx++;
     }
 
+    /* Disabling generation of a TOC since most web email interface don't allow it
     if (nbSearchWithRes > 1) {
       //plusieurs recherches, on créé un summary
       summary = "<ul>" + summary + "</ul>";
       bodyHTML = summary + bodyHTML;
       debug_(summary);
     }
+    */
 
     debug_("Nb de res tot:" + nbResTot);
     //on envoie le mail?
@@ -151,10 +154,10 @@ function processJSONAds(sheet, searchIdx, ads) {
   
   var nbRes = 0;
   var announceHTML = "";
-  var nbAds = ads.length;
   
-  if (nbAds > 0) {
+  if ((typeof ads != "undefined") && (ads.length > 0)) {
     
+    var nbAds = ads.length;
     var savedID = parseInt(sheet.getRange(2 + searchIdx, 3).getValue());
     var firstID = ads[0].list_id;
     
