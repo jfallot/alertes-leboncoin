@@ -1,7 +1,8 @@
 /*
  * ChangeLog
- * 17 juin 2018 - Meilleure gestion du cas où une recherche en format JSON ne retourne aucun résultat
- * 15 juin 2018 - Améliorations cosmétiques dans l'email 
+ * 24 Aout 2018 - Contournement de la protection https://datadome.co/ mise en place par leboncoin
+ * 17 Juin 2018 - Meilleure gestion du cas où une recherche en format JSON ne retourne aucun résultat
+ * 15 Juin 2018 - Améliorations cosmétiques dans l'email 
  * 14 Juin 2018 - Refonte du code de parsing pour utiliser la structure window.FLUX_STATE (en JSON) au lieu de l'HTML.
                 - Ajout du texte de description de l'objet dans l'email en cas de parsing Json
                 - Le mode Html est conservé pour les recherches ne retournant pas de JSon
@@ -57,8 +58,18 @@ function lbc(sendMail) {
 
       searchName = sheet.getRange(2 + searchIdx, 1).getValue();
       Logger.log("#### Recherche pour " + searchName);
-
-      var rep = UrlFetchApp.fetch(searchURL).getContentText("utf-8"); //Next page: add by example &page=2
+ 
+      var options = {
+        'muteHttpExceptions': true,
+        'followRedirects': true,
+        'headers': {
+          'Accept': 'text/html',
+          'Accept-Language': 'fr-FR,fr;q=0.9,en;q=0.8',
+          'Accept-Encoding': 'identity'
+        }
+      };   
+      
+      var rep = UrlFetchApp.fetch(searchURL, options).getContentText("utf-8"); //Next page: add by example &page=2
 
       // Serahc forthe window.FLUX_STATE JSON structure
       jsonStartPos = rep.lastIndexOf(jsonStartTag);
