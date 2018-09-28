@@ -1,8 +1,10 @@
 Alertes leboncoin
 ====================
 
+----------------------------------------------------------------------------------------------------------------------------------------
 Suite à la mise en place d'un système de protection (datadome) par leboncoin, il n'est plus possible d'utiliser Alertes leboncoin depuis le 31 Août 2018.
 Votre aide est bienvenue :)
+----------------------------------------------------------------------------------------------------------------------------------------
 
 Script d'alertes email leboncoin.fr via Google Docs
 Fork du projet de St3ph-fr (https://plus.google.com/u/0/b/116856005769817085204/116856005769817085204/posts)
