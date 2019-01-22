@@ -1,5 +1,6 @@
 /*
  * ChangeLog
+ * 22 Janv 2019 - Nouvelle adaptations aux dernières évolutions du site
  * 24 Aout 2018 - Contournement de la protection https://datadome.co/ mise en place par leboncoin
  * 17 Juin 2018 - Meilleure gestion du cas où une recherche en format JSON ne retourne aucun résultat
  * 15 Juin 2018 - Améliorations cosmétiques dans l'email 
@@ -51,7 +52,7 @@ function lbc(sendMail) {
     var searchURL = "";
     var searchName = "";
 
-    var jsonStartTag = "<script>window.FLUX_STATE = ";
+    var jsonStartTag = "window.FLUX_STATE = ";
     var jsonStartPos = -1;
 
     while ((searchURL = sheet.getRange(2 + searchIdx, 2).getValue()) != "") {
@@ -60,18 +61,36 @@ function lbc(sendMail) {
       Logger.log("#### Recherche pour " + searchName);
  
       var options = {
-        'muteHttpExceptions': true,
+        'muteHttpExceptions': false,
         'followRedirects': true,
         'headers': {
-          'Accept': 'text/html',
-          'Accept-Language': 'fr-FR,fr;q=0.9,en;q=0.8',
-          'Accept-Encoding': 'identity'
+          'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64…) Gecko/20100101 Firefox/60.0',
+          'Accept': '*/*',
+          'Accept-Encoding': 'gzip,deflate,br',
+          'Accept-Language': 'en-US'
+          
+          //'Accept': 'text/html',
+          //'Accept-Language': 'fr-FR,fr;q=0.9,en;q=0.8',
+          //'Accept-Encoding': 'identity',
+          
+          //'Accept-Language': 'en-US',
+          //'Cache-Control': 'max-age=0',
+          //'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
+          //'Accept-Encoding': 'gzip, deflate, br',
+          //'Connection': 'keep-alive',
+          //'Host': 'www.leboncoin.fr',
+          //'Upgrade-Insecure-Requests': '1',
+          //'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/68.0.3440.84 Safari/537.36',
+          //'Cookie': 'consent_geo=1; consent_comp=1; consent_cookie=1; cookieBanner=1; sq=ca=12_s; _pulse2data=4d34b52d-c644-4c8b-a0c0-527dbd5740c6%2Cv%2C74b92663-cad9-461b-bd72-4be798ad5c11%2C1536009033874%2CeyJpc3N1ZWRBdCI6IjIwMTgtMDktMDJUMTE6MjhaIiwiZW5jIjoiQTEyOENCQy1IUzI1NiIsImFsZyI6ImRpciIsImtpZCI6IjIifQ..mGrbp2vYH9DC1KGtie2uUw.IjHqRGFG47SYV1aetUuDmfoT9P9o2tQa5hA1LwePemfMOQH5dTB_hHwI7VJeru1SbH9dWxUCYoEUR7BdH8c0sB_OX1z9aRPX5GP-Ql9fVP0lLWHM7NPSifeCE2lmB5cy-gpZaPGNfosnRJzeFEvaLRfqcEEUufitudiEzSRiLwyIsuKYyH1HgOTz_WOYta0s979tFxMAqwofHSgPxaPmfvhPl6ihLPu5gxkQU8XCIHtPSIcE3OH9B_3gzJiWfRkdJk9YjL8KHl9yb-5MHmky3A.KJhasLftSe3yocfQXL2kBg%2C%2C0%2Ctrue%2C%2CeyJraWQiOiIyIiwiYWxnIjoiSFMyNTYifQ..MibRAmTw3OQLDJuhmILEuqy7bpfkMhhZHsXi-CMSdcc; layout=0; xtvrn=$266818$; cookieFrame=2; datadome=0vUgEGj__Msq27BtbFtcAFiTK-gcA8Sa~CY9JbF5LXc'
         }
-      };   
+      };
       
       var rep = UrlFetchApp.fetch(searchURL, options).getContentText("utf-8"); //Next page: add by example &page=2
-
-      // Serahc forthe window.FLUX_STATE JSON structure
+      
+      //var encodedURL = encodeURIComponent(searchURL);
+      //var rep = UrlFetchApp.fetch("https://nl.unblock.racing/?cdURL=" + encodedURL, options).getContentText("utf-8");
+      
+      // Search for the window.FLUX_STATE JSON structure
       jsonStartPos = rep.lastIndexOf(jsonStartTag);
       var results = null;
 
@@ -118,6 +137,9 @@ function lbc(sendMail) {
       }
 
       searchIdx++;
+      
+      // Tentative to bypass datadom.co protection: wait few seconds
+      Utilities.sleep(600);
     }
 
     /* Disabling generation of a TOC since most web email interface don't allow it
@@ -262,7 +284,7 @@ function processHTMLAds(sheet, searchIdx, html) {
       
       //While ID of announce is different from the saved one
       do {
-        //Logger.log("data = " + data);
+        Logger.log("data = " + data);
         
         var endListingMarker = "</li>";
         var endListingMarkerPos = data.indexOf(endListingMarker);
@@ -287,8 +309,10 @@ function processHTMLAds(sheet, searchIdx, html) {
           Logger.log("searchIdx="+searchIdx+", announceId="+announceId);
           
           //Skip the block already analyzed by searching next announce
-          var nextAnnounce = data.indexOf("<li itemscope", endListingMarkerPos + endListingMarker.length)
+          var nextAnnounce = data.indexOf("<li itemscope=\"\"", endListingMarkerPos + endListingMarker.length)
           if (nextAnnounce > 0) {
+            //nextAnnounce = data.indexOf("<a title=\"", nextAnnounce);
+            
             data = data.substring(nextAnnounce);
             announceURL = extractA_(data);
             announceId  = extractId_(announceURL);
@@ -314,6 +338,21 @@ function processHTMLAds(sheet, searchIdx, html) {
   results["announceHTML"] = announceHTML;
   
   return results;
+}
+
+/**
+ * Extrait la liste des annonces
+ */
+function extractListing_(text) {
+
+	debut = text.indexOf("<li itemscope=\"\"");
+
+	var fin = text.indexOf("<div class=\"googleafs\"", debut);
+
+	if (fin > debut)
+		return text.substring(debut, fin);
+	else
+		return "";
 }
 
 /**
@@ -383,9 +422,7 @@ function extractPro_(data) {
  */
 function extractPlace_(data) {
   
-  // Look for the 2nd "item_supp" block 
-  //var infoMarker = "itemProp=\"availableAtOrFrom\" itemscope";
-  var infoMarker = "<p class=\"item_supp\"";
+  var infoMarker = "itemprop=\"availableAtOrFrom\"";
   var info1pos = data.indexOf(infoMarker);
   info1pos = data.indexOf(infoMarker, info1pos + infoMarker.length);
   if (info1pos > 0) {
@@ -401,14 +438,14 @@ function extractPlace_(data) {
  */
 function extractPrice_(data, endListingMarkerPos) {
 
-	var priceMarker = "<h3 class=\"item_price\"";
+    var priceMarker = "itemprop=\"price\"";
 	var priceStart = data.indexOf(priceMarker);
 
 	if ((priceStart < 0) || (priceStart > endListingMarkerPos)) {
 		return "";
 	} else {     
 		var price2Start = data.indexOf(">", priceStart + priceMarker.length);
-		return data.substring(price2Start+1, data.indexOf("</h3>", price2Start+1) );
+		return data.substring(price2Start+1, data.indexOf("</span>", price2Start+1) );
 	}
 }
 
@@ -435,35 +472,17 @@ function extractDate_(data) {
  */
 function extractImage_(data, endListingMarkerPos) {
 
-  var imgStartMarker = "data-imgSrc=";
+  var imgStartMarker = "<img class=\"\" src=";
   var imageStart = data.indexOf(imgStartMarker);
   if ((imageStart < 0) || (imageStart > endListingMarkerPos)) {
     return "https://www.leboncoin.fr/img/no-picture-adview.png";
   }
   else {
     
-    var imageEnd = data.indexOf("data-imgAlt=", imageStart);
+    var imageEnd = data.indexOf("itemprop=\"image\"", imageStart);
     var image = data.substring(imageStart + imgStartMarker.length + 1, imageEnd - 2);
     return image;
   }    
-}
-
-/**
- * Extrait la liste des annonces
- */
-function extractListing_(text) {
-
-	/* var debut = text.indexOf("<section id=\"listingAds\""); */
-	/* var debut = text.indexOf("<!-- Listing list -->"); */
-	var debut = text.indexOf("<section class=\"tabsContent block-white dontSwitch");
-	debut = text.indexOf("<li itemscope", debut);
-
-	var fin = text.indexOf("</ul>", debut);
-
-	if (fin > debut)
-		return text.substring(debut, fin);
-	else
-		return "";
 }
 
 /************************************************* GENERAL ********************************************/
