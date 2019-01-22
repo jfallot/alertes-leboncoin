@@ -13,6 +13,7 @@ Fork du projet de St3ph-fr (https://plus.google.com/u/0/b/116856005769817085204/
 Pour créer rapidement votre feuille de recherche: https://goo.gl/1daGn2
 
 Historique des modifications :
+ * 22 Janv 2019 - Nouvelle adaptations aux dernières évolutions du site
  * 24 Aout 2018 - Contournement de la protection https://datadome.co/ mise en place par leboncoin
  * 17 Juin 2018 - Meilleure gestion du cas où une recherche en format JSON ne retourne aucun résultat
  * 15 Juin 2018 - Améliorations cosmétiques dans l'email 
