@@ -2,7 +2,7 @@ Alertes leboncoin
 ====================
 
 ----------------------------------------------------------------------------------------------------------------------------------------
-Suite à la mise en place d'un système de protection (datadome) par leboncoin, il n'est plus possible d'utiliser Alertes leboncoin depuis le 31 Août 2018.
+Suite à la mise en place d'un système de protection (datadome) par leboncoin, il n'est plus possible d'utiliser Alertes leboncoin depuis le 31 Août 2018 (bien qu'étrangement la protection DataDome semble se désactiver de temps en temps).
 
 Votre aide est bienvenue :)
 ----------------------------------------------------------------------------------------------------------------------------------------
